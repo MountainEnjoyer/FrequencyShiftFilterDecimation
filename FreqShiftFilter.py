@@ -9,7 +9,7 @@ fB = 120e3
 num_taps = 101
 noise_level = 0.01
 
-def spectrum(x):
+def spectrum(x, fs):
     n = len(x)
     x = x * np.hanning(n)
     X = np.fft.fft(x)
@@ -36,9 +36,9 @@ h_db = np.fft.fftshift(20 * np.log10(np.abs(h) + 1e-12))
 
 z = signal.lfilter(taps, 1.0, y)
 
-fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(9, 12))
+fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(9, 15))
 
-freqs, power_db = spectrum(x)
+freqs, power_db = spectrum(x, fs)
 
 ax1.plot(freqs / 1e3, power_db)
 ax1.axvline(fA / 1e3, color="red", linestyle="--", label=f"tone setting ({fA / 1e3:g} kHz)")
@@ -48,7 +48,8 @@ ax1.set_title("Before")
 ax1.legend(loc="upper right")
 ax1.grid(True)
 
-freqs, power_db = spectrum(y)
+
+freqs, power_db = spectrum(y, fs)
 
 ax2.plot(freqs / 1e3, power_db)
 ax2.set_xlabel("Frequency (kHz)", loc="right")
@@ -68,13 +69,28 @@ ax3.set_title("Filter response")
 ax3.legend(loc="upper right")
 ax3.grid(True)
 
-freqs, power_db = spectrum(z[num_taps:])
+z_dec = z[num_taps:][::10]
+fs_dec = fs /10
+
+freqs, power_db = spectrum(z_dec, fs_dec)
 
 ax4.plot(freqs / 1e3, power_db)
 ax4.set_xlabel("Frequency (kHz)", loc="right")
 ax4.set_ylabel("Power (dB)")
-ax4.set_title("After filtering")
+ax4.set_title("Filtering and decimation")
 ax4.grid(True)
+
+y_dec = y[::10]
+
+freqs, power_db = spectrum(y_dec, fs_dec)
+
+ax5.plot(freqs / 1e3, power_db)
+ax5.axvline(20, color="red", linestyle="--", alpha=0.5, label="neighbour folded to +20 kHz")
+ax5.set_xlabel("Frequency (kHz)", loc="right")
+ax5.set_ylabel("Power (dB)")
+ax5.set_title("Decimation without filtering")
+ax5.legend(loc="upper right")
+ax5.grid(True)
 
 plt.tight_layout()
 plt.show()
