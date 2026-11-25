@@ -1,25 +1,28 @@
-# FrequencyShiftFilter
+# FrequencyShiftFilterDecimation
 
-A Python script that takes a slice of spectrum containing two signals, moves the one you want to 0 Hz, and removes the other with a digital low-pass filter.
+A Python script that isolates one signal from a slice of spectrum and reduces its sample rate: it moves the wanted signal to 0 Hz, removes its neighbour with a low-pass filter, then keeps only one sample in ten. A second, unfiltered decimation runs alongside it to show what happens when the filter is skipped: the neighbour folds back on top of the signal.
 
-It is the second exercise of a larger project: a multi-mode software-defined radio (SDR) decoder that turns signals received with an RTL-SDR dongle into sound and decoded data. These are the first two stages of every channel the decoder will tune: **shift** the wanted station to the center, then **filter** away everything around it. Here they are built and checked on synthetic signals, where the right answer is known in advance.
+It is the third and last exercise of the DSP fundamentals phase of a larger project: a multi-mode software-defined radio (SDR) decoder that turns signals received with an RTL-SDR dongle into sound and decoded data. Shift, filter, decimate is the front end of every channel that decoder will tune. Here it is built and checked on synthetic signals, where the right answer is known in advance.
 
-The previous exercise, [FreqFinder](https://github.com/MountainEnjoyer/FreqFinder), builds the spectrum tool this one relies on.
+It continues the previous exercises: [FreqFinder](https://github.com/MountainEnjoyer/FreqFinder) (the spectrum tool) and [FrequencyShiftFilter](https://github.com/MountainEnjoyer/FrequencyShiftFilter) (the shift and the filter).
 
 ## Why this exists
 
-An SDR does not deliver one station: it delivers a whole slice of spectrum, often 2.4 MHz wide, with many signals in it. Before a station can be demodulated, it has to be isolated:
+After filtering, the wanted signal only occupies ±50 kHz, but it is still described by 1 million samples per second. Keeping every tenth sample (**decimation**) describes it just as well with 100,000 samples per second, and makes every later stage of a decoder ten times cheaper.
 
-1. **Shift.** Multiplying the samples by a rotating complex tone slides the whole spectrum sideways, so the wanted station sits at 0 Hz.
-2. **Filter.** A low-pass filter keeps a narrow band around 0 Hz and removes the neighbouring signals and the noise outside it.
+The catch is that the new sample rate can only represent frequencies between −50 and +50 kHz. Anything outside that range does not disappear: it **aliases**, folding back to a false frequency inside it. Once folded on top of the wanted signal, it can never be separated again. That is why the order is always:
 
-The order matters: the filter only keeps what is near 0 Hz, so the station has to be moved there first. This script shows each step on its own plot, so you can follow both signals through the chain.
+1. **Shift** the wanted signal to 0 Hz.
+2. **Filter** away everything outside the band to keep.
+3. **Decimate**.
+
+This script shows the right order and the wrong one side by side.
 
 ## Repository contents
 
 ```
-FrequencyShiftFilter/
-├── FreqShiftFilter.py   # the script: signal generation, shift, filter, plots
+FrequencyShiftFilterDecimation/
+├── FreqShiftFilter.py   # the script: signal generation, shift, filter, decimation, plots
 ├── exec.sh              # launcher: activates the virtual environment and runs the script
 └── README.md
 ```
@@ -48,8 +51,8 @@ sudo pacman -S --needed python tk git
 ### 2. Clone the repository
 
 ```bash
-git clone https://github.com/MountainEnjoyer/FrequencyShiftFilter.git
-cd FrequencyShiftFilter
+git clone https://github.com/MountainEnjoyer/FrequencyShiftFilterDecimation.git
+cd FrequencyShiftFilterDecimation
 ```
 
 ### 3. Create the virtual environment and install the dependencies
@@ -73,7 +76,7 @@ From the repository folder:
 ./exec.sh
 ```
 
-`exec.sh` activates the virtual environment in `.venv` and runs `FreqShiftFilter.py` with the environment's Python. It uses paths relative to the repository, so run it from inside the `FrequencyShiftFilter` folder.
+`exec.sh` activates the virtual environment in `.venv` and runs `FreqShiftFilter.py` with the environment's Python. It uses paths relative to the repository, so run it from inside the `FrequencyShiftFilterDecimation` folder.
 
 To run the script manually instead:
 
@@ -83,18 +86,19 @@ python FreqShiftFilter.py
 deactivate
 ```
 
-The script prints nothing; it opens a window with four plots stacked from top to bottom.
+The script prints nothing; it opens a window with five plots stacked from top to bottom.
 
-### What the four plots show (default settings)
+### What the five plots show (default settings)
 
-| Plot | What you see |
-| --- | --- |
-| **Before** | Two peaks of about 74 dB: the station at +200 kHz (marked by the red dashed line) and the neighbour at +120 kHz, over a noise floor near 0 dB. |
-| **After the shift** | Everything has moved 200 kHz to the left: the station now sits at 0 Hz and the neighbour at −80 kHz. |
-| **Filter response** | The filter's gain at each frequency: flat at 0 dB around 0 Hz, −6 dB at the ±50 kHz cutoff (red dashed lines), and below −40 dB (grey dotted line) from about ±65 kHz. |
-| **After filtering** | The station is unchanged at 0 Hz, about 74 dB. The neighbour has dropped to about 5 dB, 69 dB below the station, and the noise outside ±50 kHz has fallen to around −80 dB. |
+| Plot | Range | What you see |
+| --- | --- | --- |
+| **Before** | ±500 kHz | Two peaks of about 74 dB: the signal to keep at +200 kHz (marked by the red dashed line) and the neighbour at +120 kHz. |
+| **After the shift** | ±500 kHz | Everything has moved 200 kHz to the left: the signal now sits at 0 Hz and the neighbour at −80 kHz. |
+| **Filter response** | ±500 kHz | The low-pass filter: 0 dB around 0 Hz, −6 dB at the ±50 kHz cutoff (red dashed lines), below −40 dB (grey dotted line) from about ±65 kHz. |
+| **Filtering and decimation** | ±50 kHz | The right order. One clean peak at 0 Hz, about 54 dB, over a noise floor near −23 dB. The neighbour was removed before decimation, so nothing folds in. |
+| **Decimation without filtering** | ±50 kHz | The wrong order. The neighbour has folded from −80 kHz to **+20 kHz** (red dashed line), as loud as the signal at about 54 dB. The noise floor is 10 dB higher, near −13 dB, because the noise of the whole ±500 kHz band folded in too. |
 
-Levels are relative, not calibrated: a full-amplitude tone over N = 10,000 samples would reach 80 dB, and the Hann window used for display lowers it by 6 dB. Noise is random, so small values change slightly on every run.
+The two decimated spectra have 1,000 samples instead of 10,000, so a full tone reaches 60 dB instead of 80 dB, and the Hann window used for display lowers both by 6 dB: 74 dB before decimation, 54 dB after. The signal is not weaker; there are fewer samples. Levels are relative, not calibrated, and noise values change slightly on every run.
 
 ## Configuration
 
@@ -102,20 +106,20 @@ All settings are at the top of `FreqShiftFilter.py`.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `fs` | `1e6` | Sample rate in samples per second. The spectrum covers −500 to +500 kHz. |
+| `fs` | `1e6` | Sample rate before decimation, in samples per second. The first three plots cover −500 to +500 kHz. |
 | `N` | `10000` | Number of samples, giving 100 Hz frequency bins. |
-| `fA` | `200e3` | Frequency of the station, the signal to keep, in Hz. The shift always moves `fA` to 0 Hz. |
-| `fB` | `120e3` | Frequency of the neighbour, the signal to remove, in Hz. |
-| `num_taps` | `101` | Number of filter coefficients. More taps give a sharper filter edge, at the cost of more computation and more delay. |
-| `noise_level` | `0.01` | Standard deviation of the complex Gaussian noise added to the signal. `0` gives a clean signal. |
+| `fA` | `200e3` | Frequency of the signal to keep, in Hz. The shift always moves `fA` to 0 Hz. |
+| `fB` | `120e3` | Frequency of the neighbour, in Hz. After the shift it sits at `fB − fA`. |
+| `num_taps` | `101` | Number of filter coefficients. More taps give a sharper filter edge. |
+| `noise_level` | `0.01` | Standard deviation of the complex Gaussian noise. `0` gives a clean signal. |
 
-The filter cutoff (50 kHz) is set directly in the call to `signal.firwin`.
+Two more values are set in the code: the filter cutoff (50 kHz) in the call to `signal.firwin`, and the decimation factor (10), in the two `[::10]` slices and in `fs_dec = fs / 10`. When changing the factor, change all three places together.
 
 ## How it works
 
 ### 1. Signal
 
-Two complex tones, `exp(j·2π·fA·t)` and `exp(j·2π·fB·t)`, are added together with optional complex noise. This imitates a slice of spectrum as an SDR delivers it, as I/Q samples, with two stations in it.
+Two complex tones, `exp(j·2π·fA·t)` and `exp(j·2π·fB·t)`, are added together with optional complex noise. This imitates a slice of spectrum as an SDR delivers it, as I/Q samples, with two signals in it.
 
 ### 2. Frequency shift
 
@@ -123,83 +127,83 @@ Two complex tones, `exp(j·2π·fA·t)` and `exp(j·2π·fB·t)`, are added toge
 y = x * np.exp(-2j * np.pi * fA * t)
 ```
 
-Multiplying two complex numbers adds their angles, so multiplying every sample by a tone rotating at −fA lowers every frequency in the signal by fA. The station at fA lands at 0 Hz and the neighbour at fB − fA. Nothing is removed yet: both signals are still there, just moved.
+Multiplying two complex numbers adds their angles, so multiplying every sample by a tone rotating at −fA lowers every frequency by fA. The signal at fA lands at 0 Hz, the neighbour at fB − fA = −80 kHz.
 
-### 3. Filter design
+### 3. Low-pass filter
 
 ```python
 taps = signal.firwin(num_taps, 50e3, fs=fs)
-```
-
-`firwin` designs a low-pass FIR (finite impulse response) filter: a list of `num_taps` weights. Applying it replaces each sample by a weighted sum of the last `num_taps` samples, which keeps slow changes (low frequencies) and cancels fast ones (high frequencies). The cutoff is 50 kHz, so the filter passes a band from −50 to +50 kHz.
-
-### 4. Filter response
-
-`signal.freqz` computes the filter's gain at 8192 frequencies. With `whole=True` it covers 0 to fs; the upper half is relabelled as negative frequencies and reordered with `fftshift`, so the response is drawn from −500 to +500 kHz like the spectra.
-
-### 5. Filtering
-
-```python
 z = signal.lfilter(taps, 1.0, y)
 ```
 
-`lfilter` applies the filter to every sample. The `1.0` means there is no feedback (an FIR filter).
+`firwin` designs a low-pass FIR filter that keeps ±50 kHz around 0 Hz; `lfilter` applies it to every sample. `signal.freqz` computes its response for the third plot, over the full ±500 kHz.
 
-### 6. Start-up transient
+### 4. Decimation
 
-The filter's memory starts empty, so its first `num_taps` outputs are not valid yet. They are left out of the last spectrum with `z[num_taps:]`.
+```python
+z_dec = z[num_taps:][::10]
+fs_dec = fs / 10
+```
 
-### 7. Spectrum
+`z[num_taps:]` drops the filter's start-up transient (its first outputs, computed while its memory was still empty). `[::10]` then keeps every tenth sample. The sample rate drops to 100,000 samples per second, so the visible range becomes ±50 kHz, exactly the band the filter kept.
 
-The `spectrum()` function applies a Hann window, computes the FFT, converts it to power in dB and reorders it from −fs/2 to +fs/2. It uses the length of whatever it receives, so it works on both the full signal and the trimmed filter output.
+### 5. Decimation without filtering
+
+```python
+y_dec = y[::10]
+```
+
+The same decimation applied to the shifted but unfiltered signal, for comparison.
+
+### 6. Spectrum
+
+The `spectrum(x, fs)` function applies a Hann window, computes the FFT, converts it to power in dB and reorders it from −fs/2 to +fs/2. It takes the sample rate as a parameter, so the same function labels the frequencies correctly before (`fs`) and after (`fs_dec`) decimation.
+
+## Why the neighbour lands at +20 kHz
+
+At 100,000 samples per second, a tone at −80 kHz turns −0.8 of a full circle between one sample and the next. Since whole turns are invisible in the samples, that lands in exactly the same places as turning +0.2 of a circle, which is a tone at +20 kHz:
+
+```
+e^(j·2π·(−0.8)·n) = e^(j·2π·(+0.2)·n)    for every whole number n
+```
+
+In general, a frequency outside ±fs_dec/2 is moved by multiples of fs_dec until it falls inside: −80 kHz + 100 kHz = +20 kHz. Before decimation, at 1 million samples per second, the same tone turns only −0.08 of a circle per sample, which is unambiguous, so the filter can recognise it and remove it.
 
 ## Experiments
 
 Change one setting at a time and predict the result before running. The results below were produced by this script.
 
-| Change | Result | Concept |
-| --- | --- | --- |
-| Default (`num_taps = 101`, neighbour lands at −80 kHz) | Neighbour 69 dB below the station | **Close neighbour.** Only 30 kHz outside the passband, it still needs a sharp filter. |
-| `num_taps = 21` | Neighbour only 13 dB below the station; the filter reaches −40 dB only at 126 kHz | **Filter length.** Fewer taps give a gradual edge: the neighbour stays almost as loud as the station. |
-| `num_taps = 301` | −40 dB reached at 55 kHz; neighbour 64 dB below the station | **Sharper is not always deeper.** More taps narrow the edge, but the rejection beyond it is set by the filter's window design, not by its length. |
-| `fB = -250e3` | Neighbour lands at −450 kHz and ends 83 dB below the station | **Distant neighbour.** Far outside the passband, it is removed easily. |
-| Shift with the wrong sign: `np.exp(2j * np.pi * fA * t)` | Station moves to +400 kHz and neighbour to +320 kHz; after filtering, only noise is left | **Shift direction.** Moving the wrong way pushes the station out of the passband. |
-| Skip the shift (filter `x` directly) | Both signals are outside ±50 kHz and are removed | **Shift before filtering.** The filter only keeps what sits near 0 Hz. |
-
-### Filter length at a glance
-
-| `num_taps` | −6 dB point | Below −40 dB from | Delay |
+| Change | Filtering and decimation | Decimation without filtering | Concept |
 | --- | --- | --- | --- |
-| 21 | 57 kHz | 126 kHz | 10 samples (10 µs) |
-| 101 | 50 kHz | 65 kHz | 50 samples (50 µs) |
-| 301 | 50 kHz | 55 kHz | 150 samples (150 µs) |
-
-A linear-phase FIR filter delays the signal by (num_taps − 1) / 2 samples.
+| Default | Nothing at +20 kHz (about −14 dB) | Neighbour at +20 kHz, 54 dB | **Filter before decimating.** |
+| `num_taps = 21` | Neighbour at +20 kHz, 41 dB: only 13 dB below the signal | Neighbour at +20 kHz, 54 dB | **A weak filter leaks.** What the filter fails to remove still folds in, and stays. |
+| `fB = 170e3` (neighbour lands at −30 kHz) | Neighbour stays at −30 kHz, 54 dB | Neighbour stays at −30 kHz, 54 dB | **In-band signals.** A neighbour inside the kept band is not aliasing, and no decimation can remove it: the filter has to be narrower. |
+| `fB = -250e3` (neighbour lands at −450 kHz) | Nothing at the folded position (about −40 dB) | Neighbour folded to −50 kHz, 54 dB | **Every out-of-band signal folds somewhere**, even a distant one: −450 kHz + 4 × 100 kHz = −50 kHz, the edge of the range. |
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `.venv/bin/activate: No such file or directory` | The virtual environment was not created, or `exec.sh` was run from another folder | Create it (Installation, step 3) and run `./exec.sh` from inside `FrequencyShiftFilter`. |
+| `.venv/bin/activate: No such file or directory` | The virtual environment was not created, or `exec.sh` was run from another folder | Create it (Installation, step 3) and run `./exec.sh` from inside `FrequencyShiftFilterDecimation`. |
 | `ModuleNotFoundError: No module named 'scipy'` | SciPy is missing from the virtual environment | `source .venv/bin/activate`, then `pip install scipy`. |
 | `error: externally-managed-environment` | `pip install` was run outside the virtual environment | Activate `.venv` before installing. |
 | `Permission denied` when running `./exec.sh` | The launcher is not executable | `chmod +x exec.sh` |
 | No plot window appears | The `tk` package is missing, or Matplotlib is using a non-interactive backend | `sudo pacman -S tk`, and run from a regular terminal. |
-| `ValueError` from `firwin` (after editing) | The cutoff was given without `fs=fs`, so it is read as a fraction of fs/2 | Keep `fs=fs` in the call. |
-| `operands could not be broadcast together` (after editing) | The spectrum function was given an array whose length differs from the window's | Keep `n = len(x)` inside `spectrum()`. |
+| The folded neighbour appears at +200 kHz instead of +20 kHz (after editing) | A decimated signal was passed to `spectrum()` with `fs` instead of `fs_dec` | Always pass the rate the signal actually has. |
+| Peaks in the wrong place after changing the decimation factor | The factor was changed in one place but not the others | Change both `[::10]` slices and `fs_dec` together. |
 | Errors after a system Python upgrade | The virtual environment was built for the previous Python version | `rm -rf .venv`, then repeat Installation, step 3. |
 
 ## Roadmap
 
-FrequencyShiftFilter covers the second exercise of the DSP fundamentals phase:
+This repository completes the DSP fundamentals phase:
 
 1. [FreqFinder](https://github.com/MountainEnjoyer/FreqFinder): find a frequency with the FFT.
-2. **FrequencyShiftFilter (this repository):** shift a signal to 0 Hz and isolate it with a low-pass filter.
-3. Decimate with and without filtering to observe aliasing.
+2. [FrequencyShiftFilter](https://github.com/MountainEnjoyer/FrequencyShiftFilter): shift a signal to 0 Hz and isolate it with a low-pass filter.
+3. **FrequencyShiftFilterDecimation (this repository):** reduce the sample rate, and see why the filter must come first.
 
-Later phases decode real signals from an RTL-SDR: FM and AM radio, then digital modes such as ADS-B aircraft messages.
+The next phase records a real FM station with an RTL-SDR and runs it through this same chain, adding FM demodulation to turn it into sound.
 
 ## Further reading
 
-- [PySDR: A Guide to SDR and DSP using Python](https://pysdr.org), chapters on filters and frequency shifting
-- [SciPy signal processing documentation](https://docs.scipy.org/doc/scipy/reference/signal.html): `firwin`, `freqz`, `lfilter`
+- [PySDR: A Guide to SDR and DSP using Python](https://pysdr.org), chapters on sampling, filters and multi-rate processing
+- [SciPy signal processing documentation](https://docs.scipy.org/doc/scipy/reference/signal.html): `firwin`, `freqz`, `lfilter`, `decimate`
