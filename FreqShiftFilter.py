@@ -5,14 +5,16 @@ from scipy import signal
 fs = 1e6
 N = 10000
 fA = 200e3
-fB = -250e3
+fB = 120e3
+num_taps = 101
 noise_level = 0.01
 
 def spectrum(x):
-    x = x * np.hanning(N)
+    n = len(x)
+    x = x * np.hanning(n)
     X = np.fft.fft(x)
     power_db = 10 * np.log10(np.abs(X) ** 2 + 1e-12)
-    freqs = np.fft.fftfreq(N, d=1 /fs)
+    freqs = np.fft.fftfreq(n, d=1 /fs)
     power_db = np.fft.fftshift(power_db)
     freqs = np.fft.fftshift(freqs)
     return freqs, power_db
@@ -27,9 +29,10 @@ if noise_level > 0 :
     x += noise
 
 y = x * np.exp(-2j * np.pi * fA * t)
-taps = signal.firwin(101, 50e3, fs=fs)
-w, h = signal.freqz(taps, worN=8192, fs=fs)
-h_db = 20 * np.log10(np.abs(h) + 1e-12)
+taps = signal.firwin(num_taps, 50e3, fs=fs)
+w, h = signal.freqz(taps, worN=8192, whole=True, fs=fs)
+w = np.fft.fftshift(np.where(w >= fs / 2, w - fs, w))
+h_db = np.fft.fftshift(20 * np.log10(np.abs(h) + 1e-12))
 
 z = signal.lfilter(taps, 1.0, y)
 
@@ -59,14 +62,13 @@ ax3.axvline(50, color="red", linestyle="--")
 ax3.axvline(-50, color="red", linestyle="--", label="cutoff ±50 kHz")
 ax3.axhline(-40, color="gray", linestyle=":", label="−40 dB")
 ax3.set_ylim(-110, 5)
-ax3.set_xlim(-400, 400)
 ax3.set_xlabel("Frequency (kHz)", loc="right")
 ax3.set_ylabel("Gain (dB)")
 ax3.set_title("Filter response")
 ax3.legend(loc="upper right")
 ax3.grid(True)
 
-freqs, power_db = spectrum(z)
+freqs, power_db = spectrum(z[num_taps:])
 
 ax4.plot(freqs / 1e3, power_db)
 ax4.set_xlabel("Frequency (kHz)", loc="right")
